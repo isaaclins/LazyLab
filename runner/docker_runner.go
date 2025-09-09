@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	defaultImage = "homebrew/brew:latest"
+	defaultImage    = "homebrew/brew:latest"
+	brewCacheVolume = "lazylab_brew_cache"
 )
 
 var dockerNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]+$`)
@@ -93,6 +94,11 @@ func Run(ctx context.Context, cfg config.RuntimeConfig) error {
 	}
 
 	args := dockerargs.BuildRunArgs(cfg)
+	// Add brew cache volume mounts when enabled
+	if cfg.CachePackages {
+		args = append(args, "--mount", fmt.Sprintf("type=volume,src=%s,dst=/home/linuxbrew/.cache/Homebrew", brewCacheVolume))
+		args = append(args, "--mount", fmt.Sprintf("type=volume,src=%s,dst=/home/linuxbrew/.linuxbrew/Homebrew/Cache", brewCacheVolume))
+	}
 	args = append(args, "--detach")
 	args = append(args, "--name", containerName)
 	// keep container alive for exec/attach
@@ -281,6 +287,9 @@ func gracefulStop(ctx context.Context, container string, cfg config.RuntimeConfi
 	}
 	if cfg.PurgeOnExit {
 		_ = runCmdInherit(ctx, "docker", "rm", container)
+	}
+	if cfg.PurgeCache {
+		_ = runCmdInherit(ctx, "docker", "volume", "rm", "-f", brewCacheVolume)
 	}
 	return nil
 }
