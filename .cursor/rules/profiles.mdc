@@ -1,0 +1,90 @@
+---
+alwaysApply: false
+description: Profiles for saving and running lazylab container configurations
+---
+
+# Profiles
+
+Save and reuse complete lazylab configurations by name. Profiles reduce repetitive CLI typing and promote reproducible runs.
+
+## Storage
+
+- Location: `~/.lazylab/profiles/`
+- Format: YAML (preferred) or JSON; one file per profile: `<name>.yaml` or `<name>.json`
+- Permissions: 0700 for directory, 0600 for files
+- Names: `^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`
+
+## Schema
+
+Each profile captures all CLI options:
+
+```yaml
+name: <string> # optional display name; file name is the key
+packages: [string] # -p
+copy: [string] # -c
+mounts: [string] # -m (host[:container])
+containerName: <string> # -n
+prefix: <string> # --prefix
+purge: <bool> # --purge
+noNet: <bool> # --no-net
+memory: <string> # --memory (e.g., 1g)
+cpus: <string|number> # --cpus
+pidsLimit: <int> # --pids-limit
+readOnly: <bool> # --read-only
+writable: [string] # --writable
+amd64: <bool> # --amd64
+graceful: <bool> # --graceful
+```
+
+## Precedence and Merge
+
+- When a profile is used, its fields form the base configuration.
+- CLI flags provided at invocation override the profile values.
+- Normalization/validation occurs after merge. Conflicts surface as errors with actionable messages.
+
+## Commands
+
+- `lazylab profile save <name>`
+  - Saves the current resolved CLI flags into `~/.lazylab/profiles/<name>.yaml` atomically.
+- `lazylab profile list`
+  - Lists profile names and brief summaries.
+- `lazylab profile run <name> [extra flags]`
+  - Loads the profile, merges extra flags, then runs the container.
+- `lazylab profile delete <name>`
+  - Removes the profile file (promptless in non-interactive/CI).
+- `lazylab profile edit <name>`
+  - Opens the profile in `$EDITOR` or sensible default; re-validate on save.
+
+## Implementation Notes
+
+- Use XDG-compliant path resolution; default to `~/.lazylab/profiles`.
+- Atomic writes: write to temp + `fsync` + `rename` to avoid partial files.
+- Validate mounts and paths during `run`; do not hard-fail `save` unless schema invalid.
+- Support both YAML and JSON; prefer YAML on save unless original extension is JSON.
+- Provide `--profile <name>` shorthand equivalent to `profile run <name>`.
+
+## Examples
+
+```bash
+# Save current flags as profile
+lazylab --no-net --read-only --writable /work -m ~/samples:/samples profile save offline
+
+# Run profile with override for CPUs
+lazylab profile run offline --cpus 2
+
+# Edit a profile
+lazylab profile edit offline
+```
+
+## Security
+
+- Enforce restrictive file perms; warn if world-readable.
+- Sanitize `-c` and `-m` paths; resolve symlinks defensively at runtime.
+- Do not embed secrets in profiles; prefer env vars managed by the shell.
+
+## Related Rules
+
+- [cli-spec.mdc](mdc:.cursor/rules/cli-spec.mdc)
+- [architecture.mdc](mdc:.cursor/rules/architecture.mdc)
+- [go-style.mdc](mdc:.cursor/rules/go-style.mdc)
+- [testing.mdc](mdc:.cursor/rules/testing.mdc)

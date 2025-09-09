@@ -1,0 +1,82 @@
+---
+alwaysApply: false
+description: High-level architecture and flow of lazylab with diagrams
+---
+
+# lazylab Architecture
+
+This rule outlines the components and data flow of the `lazylab` CLI for orchestrating Docker containers for malware analysis.
+
+## High-level Flow
+
+```mermaid
+flowchart TD
+    A[User CLI Invocation] --> B[Flag Parsing & Validation]
+    B --> P[Profile Loader/Merger]
+    P --> C[Config Derivation]
+    C --> D[Docker Arg Builder]
+    D --> E[Container Lifecycle Manager]
+    E -->|create| F[(Docker Engine)]
+    E -->|monitor| G[Signal Handler]
+    G -->|SIGINT/SIGTERM| E
+    E -->|logs| H[Stdout/Stderr]
+    E -->|exit| I{--purge?}
+    I -- yes --> J[Stop & Remove Container]
+    I -- no --> K[Leave Container Running]
+```
+
+## Component Responsibilities
+
+- Flag Parsing & Validation
+  - Parse CLI options, normalize inputs, detect conflicts.
+- Profile Loader/Merger
+  - Load profile from `~/.lazylab/profiles`, merge with CLI flags, re-validate.
+- Config Derivation
+  - Convert flags into a normalized runtime configuration (platform, mounts, limits, security).
+- Docker Arg Builder
+  - Declaratively build Docker create/run commands; prefer `docker run` with `--detach` for post-creation steps.
+- Container Lifecycle Manager
+  - Create/start, optionally copy files, run `brew install`, stream logs, forward signals, graceful stop, purge.
+- Signal Handler
+  - Trap signals; implement `--graceful` behavior with timeouts and fallbacks.
+
+## Sequence: Profile Run
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant L as lazylab
+    participant S as Profile Store
+    participant D as Docker Engine
+    U->>L: lazylab profile run <name> [flags]
+    L->>S: read ~/.lazylab/profiles/<name>.{yaml,json}
+    L->>L: merge profile + flags; validate
+    L->>D: docker run --detach ...
+    D-->>L: container id
+    L->>D: post-create steps (cp, installs)
+    L->>D: attach/logs; handle signals
+```
+
+## Sequence: Profile Save
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant L as lazylab
+    participant S as Profile Store
+    U->>L: lazylab profile save <name> [flags]
+    L->>L: resolve flags -> config (no docker)
+    L->>S: atomic write ~/.lazylab/profiles/<name>.yaml
+```
+
+## Design Considerations
+
+- Idempotency: multiple runs with same name should fail fast unless overridden.
+- Observability: print fully-resolved Docker commands; provide `--verbose`.
+- Security: restrict profile file permissions and sanitize paths at runtime.
+- Extensibility: subcommand-friendly structure, separate packages per component.
+
+## Related Rules
+
+- [cli-spec.mdc](mdc:.cursor/rules/cli-spec.mdc)
+- [profiles.mdc](mdc:.cursor/rules/profiles.mdc)

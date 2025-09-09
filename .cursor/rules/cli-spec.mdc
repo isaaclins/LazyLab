@@ -1,0 +1,93 @@
+---
+alwaysApply: false
+description: lazylab CLI options, behaviors, and examples for quick reference
+---
+
+# lazylab CLI Spec
+
+This rule documents the `lazylab` command-line interface for managing malware-analysis Docker containers. Reference it when implementing flag parsing, validation, and runtime behavior.
+
+## Commands
+
+- `lazylab` (default): runs an interactive container with configured options
+- `lazylab profile save <name>`: save current flags as a named profile
+- `lazylab profile list`: list saved profiles
+- `lazylab profile run <name>`: run using a saved profile, allowing further flag overrides
+- `lazylab profile delete <name>`: delete a profile
+- `lazylab profile edit <name>`: open a profile in `$EDITOR`
+
+## Profile Usage and Precedence
+
+- Base config is loaded from the profile; CLI flags given alongside `profile run` override profile values.
+- Equivalent shorthand: `--profile <name>` at top-level performs the same merge.
+- Profile storage: see [profiles.mdc](mdc:.cursor/rules/profiles.mdc)
+
+## Options
+
+- `-p <pkg>[,<pkg>...]` Install packages in the container via Homebrew.
+  - Behavior: translate to `brew install` inside the container during startup.
+  - Failure handling: fail fast on unknown package or brew error.
+- `-c <path>[,<path>...]` Copy files/dirs from host into container (immutable inside container).
+  - Behavior: use `docker cp` after container creation but before user shell starts. Apply `chattr +i` or equivalent immutability when possible; otherwise set permissions read-only.
+- `-m <path>[:<containerPath>][,<path>...]` Mount host files/dirs into container (editable).
+  - Behavior: bind mounts via `-v` or `--mount` retain host writability.
+- `-n <name>` Specify custom container name.
+  - Behavior: use name as-is after validation.
+- `--prefix <prefix>` Prefix for generated container names when `-n` not provided.
+  - Behavior: `prefix-<timestamp>-<rand>`; ensure Docker name validity.
+- `--purge` Stop and remove the container after exit.
+  - Behavior: equivalent to `--rm` plus explicit network/volume cleanup if created.
+- `--no-net` Disable network access inside the container.
+  - Behavior: `--network none`; when combined with `-p`, `brew install` should be skipped with a clear warning unless an offline cache is available.
+- `--memory <bytes|human>` Limit container memory usage.
+  - Behavior: pass to Docker `--memory` (e.g., `512m`, `2g`).
+- `--cpus <num>` Limit number of CPUs.
+  - Behavior: pass to Docker `--cpus`.
+- `--pids-limit <num>` Limit number of processes.
+  - Behavior: pass to Docker `--pids-limit`.
+- `--read-only` Make container filesystem read-only.
+  - Behavior: Docker `--read-only`; pair with `--writable` to carve exceptions.
+- `--writable <path>[,<path>...]` Allow specific paths to be writable even in read-only mode.
+  - Behavior: create tmpfs or bind mount writable directories.
+- `--amd64` Force container architecture to amd64.
+  - Behavior: `--platform linux/amd64`.
+- `--graceful` Gracefully stop the container with cleanup.
+  - Behavior: on SIGINT/SIGTERM send `docker stop` with timeout, then remove if `--purge`.
+- `--profile <name>` Load and merge the named profile with CLI flags.
+
+## Validation
+
+- Mutually aware flags:
+  - `--no-net` with `-p`: warn and skip installs.
+  - `--read-only` without `--writable`: ensure shell remains usable (e.g., writable `/tmp`, `$HOME`).
+- Paths for `-c` and `-m` must exist on host; error otherwise.
+- Container name validity: `^[a-zA-Z0-9][a-zA-Z0-9_.-]+$` and unique.
+- Profile name validity and presence checked when requested.
+
+## Name Generation
+
+If `-n` not provided:
+
+- Use `--prefix` if given, else default `lazylab`.
+- Format: `<prefix>-yyyyMMddHHmmss-<5charRand>`
+
+## Examples
+
+```bash
+# Read-only, networkless container with tmpfs writable /work and 1 CPU, 1G RAM
+lazylab --no-net --read-only --writable /work --cpus 1 --memory 1g
+
+# Save then run with overrides
+lazylab --no-net --read-only -m ~/samples:/samples profile save offline
+lazylab profile run offline --cpus 2
+
+# Shorthand with --profile
+lazylab --profile offline --cpus 2
+```
+
+## Implementation Notes
+
+- Use a structured flag parser; validate early and aggregate errors.
+- Derive Docker CLI args deterministically from options; log full command line for auditability.
+- Stream container logs to stdout; forward signals.
+- On `--graceful`, trap signals and perform ordered shutdown.

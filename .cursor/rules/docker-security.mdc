@@ -1,0 +1,51 @@
+---
+alwaysApply: false
+description: Docker security, isolation, and resource limits for lazylab
+---
+
+# Docker Security and Runtime Guidance
+
+Secure-by-default runtime posture for malware analysis containers.
+
+## Secure Defaults
+
+- Disable networking by default when `--no-net` is set: `--network none`.
+- Prefer read-only root filesystem: `--read-only` with explicit writable carve-outs via `--writable`.
+- Avoid privileged mode; do not use `--privileged`.
+- Drop unnecessary Linux capabilities; consider `--cap-drop ALL` and add only needed caps.
+- Prevent new privileges: `--security-opt no-new-privileges:true`.
+- Use user namespaces or non-root user where feasible.
+
+## Resource Limits
+
+- Memory: map `--memory` to Docker `--memory` (validate formats: `m`, `g`).
+- CPU: map `--cpus` to Docker `--cpus`.
+- PIDs: map `--pids-limit` to Docker `--pids-limit`.
+- Consider `--memory-swap` behavior; by default do not overcommit.
+
+## Filesystem Controls
+
+- Read-only root with writable paths:
+  - Use tmpfs for ephemeral writable dirs: `--mount type=tmpfs,destination=/tmp`
+  - Bind mount host dirs when intentional: `--mount type=bind,src=...,dst=...,rw`
+- For `-c` copied files, ensure they are read-only in container; if immutable not supported, set permissions 0444.
+
+## Architecture Forcing
+
+- Use `--platform linux/amd64` when `--amd64` is provided.
+
+## Signals and Cleanup
+
+- On `--graceful`, send `docker stop --time <timeout>`; follow with `docker rm` if `--purge`.
+- Ensure volumes/networks created by lazylab are removed when purging.
+
+## References
+
+- Docker run reference: `https://docs.docker.com/reference/cli/docker/container/run/`
+- Docker security best practices: `https://docs.docker.com/build/building/best-practices/`
+- Linux capabilities: `https://man7.org/linux/man-pages/man7/capabilities.7.html`
+
+## Related Rules
+
+- [cli-spec.mdc](mdc:.cursor/rules/cli-spec.mdc)
+- [architecture.mdc](mdc:.cursor/rules/architecture.mdc)

@@ -1,0 +1,60 @@
+---
+globs: *.go
+description: Go style and patterns for lazylab codebase
+---
+
+# Go Style and Patterns
+
+Follow these conventions when implementing lazylab in Go.
+
+## Structure
+
+- Use packages to separate concerns:
+  - `cmd` for CLI entry and flag wiring
+  - `config` for normalized runtime configuration
+  - `docker` for Docker client/command interactions
+  - `lifecycle` for container lifecycle and signal handling
+  - `profiles` for load/save/list/delete/edit logic
+- Keep `main.go` minimal: parse args, delegate.
+
+## Flag Parsing
+
+- Prefer a robust parser (e.g., `flag` or `spf13/pflag`).
+- Validate early; aggregate multiple validation errors and return a single error with joined messages.
+- Use explicit types for resource flags (memory as string validated to Docker format).
+
+## Errors
+
+- Return wrapped errors with context using `%w` and `errors.Join` where appropriate.
+- Do not log and return the same error; log at boundaries.
+- Prefer sentinel errors for predictable conditions (e.g., name conflict, profile not found).
+
+## Concurrency and Signals
+
+- Use contexts with cancellation for long-running Docker operations.
+- Trap `os.Interrupt` and `syscall.SIGTERM`; forward to Docker stop with timeout.
+
+## I/O
+
+- Stream logs using readers; avoid buffering entire logs in memory.
+- Print resolved Docker command line for transparency when `--verbose`.
+- Atomic profile writes: write to temp file in same dir, `fsync`, then `os.Rename`.
+- Enforce directory/file permissions: `0700` for `~/.lazylab/profiles`, `0600` for profile files.
+
+## Testing
+
+- Dependency-inject Docker runner interface to enable mocking.
+- Cover validation and arg-building with table-driven tests.
+- Profile tests: merge precedence, YAML/JSON decode/encode, permission enforcement.
+
+## Security Defaults
+
+- Honor `--no-net`, `--read-only`, and `--writable` mappings precisely.
+- Sanitize and validate host paths for `-c` and `-m`.
+- Validate profile names and sanitize against path traversal.
+
+## References
+
+- [architecture.mdc](mdc:.cursor/rules/architecture.mdc)
+- [cli-spec.mdc](mdc:.cursor/rules/cli-spec.mdc)
+- [profiles.mdc](mdc:.cursor/rules/profiles.mdc)

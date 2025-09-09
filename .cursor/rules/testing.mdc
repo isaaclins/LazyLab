@@ -1,0 +1,42 @@
+---
+alwaysApply: false
+description: Testing guidance for lazylab (unit, integration/e2e, CI)
+---
+
+# Testing lazylab
+
+Guidance for effective testing across layers.
+
+## Unit Tests
+
+- Table-driven tests for flag parsing, validation, and arg building.
+- Mock Docker interactions via an interface (e.g., `DockerRunner`) to avoid side-effects.
+- Validate error aggregation and conflict detection.
+- Profile tests:
+  - Load/merge precedence (profile base overridden by CLI flags)
+  - Atomic save and file permission checks
+  - YAML/JSON roundtrip fidelity
+
+## Integration/E2E Tests
+
+- Use a throwaway container image (e.g., minimal Debian/Ubuntu with brew if required) to validate flows:
+  - `--no-net` results in no outbound connectivity
+  - `--read-only` with `--writable` allows writes only to specified paths
+  - `-m` mounts reflect host changes; `-c` copies are read-only in container
+  - `--purge` removes container on exit
+  - Profiles: `profile run <name>` merges with overrides and executes successfully
+- Randomize container names with a test prefix; ensure cleanup even on failures.
+- Skip or mark as long-running if Docker not available in CI.
+
+## CI Considerations
+
+- Gate E2E on an opt-in job with Docker-in-Docker or privileged runner.
+- Cache Go dependencies; run `go test -race -cover` for unit tests.
+- Collect logs and resolved Docker commands as artifacts for debugging.
+
+## Related Rules
+
+- [go-style.mdc](mdc:.cursor/rules/go-style.mdc)
+- [architecture.mdc](mdc:.cursor/rules/architecture.mdc)
+- [cli-spec.mdc](mdc:.cursor/rules/cli-spec.mdc)
+- [profiles.mdc](mdc:.cursor/rules/profiles.mdc)

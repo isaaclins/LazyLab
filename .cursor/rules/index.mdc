@@ -1,0 +1,17 @@
+---
+alwaysApply: true
+description: Index of lazylab Cursor rules and starting points
+---
+
+# lazylab Rules Index
+
+Start here to navigate rules for the lazylab project.
+
+- CLI Spec: [cli-spec.mdc](mdc:.cursor/rules/cli-spec.mdc)
+- Architecture: [architecture.mdc](mdc:.cursor/rules/architecture.mdc)
+- Go Style: [go-style.mdc](mdc:.cursor/rules/go-style.mdc)
+- Docker Security: [docker-security.mdc](mdc:.cursor/rules/docker-security.mdc)
+- Testing: [testing.mdc](mdc:.cursor/rules/testing.mdc)
+- Profiles: [profiles.mdc](mdc:.cursor/rules/profiles.mdc)
+
+These rules guide implementation details, patterns, and guardrails for the malware analysis container workflow.
