@@ -1,0 +1,26 @@
+project_name: lazylab
+
+release:
+  prerelease: auto
+
+builds:
+  - id: lazylab
+    main: ./main.go
+    binary: lazylab
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: ["-trimpath"]
+    ldflags:
+      - -s -w
+
+archives:
+  - id: archive
+    builds: [lazylab]
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+dockers: []
