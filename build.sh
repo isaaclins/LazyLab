@@ -9,7 +9,10 @@ mkdir -p bin
 APP_NAME="lazylab"
 GOOS_ENV=${GOOS:-}
 GOARCH_ENV=${GOARCH:-}
-LDFLAGS=${LDFLAGS:-"-s -w"}
+GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "none")
+BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+VERSION=${VERSION:-dev}
+LDFLAGS=${LDFLAGS:-"-s -w -X github.com/isaaclins/LazyLab/cmd.Version=$VERSION -X github.com/isaaclins/LazyLab/cmd.Commit=$GIT_COMMIT -X github.com/isaaclins/LazyLab/cmd.Date=$BUILD_DATE"}
 
 # Determine output extension for Windows
 TARGET_OS=${GOOS_ENV:-$(go env GOOS)}
