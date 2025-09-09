@@ -55,7 +55,7 @@ jobs:
         run: go test -race -v -p 2 ./...
 
       - name: Install gosec (pinned)
-        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.21.0
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.7
 
       - name: Run gosec
         run: $HOME/go/bin/gosec ./...
