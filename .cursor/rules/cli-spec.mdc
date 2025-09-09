@@ -20,49 +20,58 @@ This rule documents the `lazylab` command-line interface for managing malware-an
 
 - Base config is loaded from the profile; CLI flags given alongside `profile run` override profile values.
 - Equivalent shorthand: `--profile <name>` at top-level performs the same merge.
-- Profile storage: see [profiles.mdc](mdc:.cursor/rules/profiles.mdc)
+- Profile storage and schema: see [profiles.mdc](mdc:.cursor/rules/profiles.mdc)
 
 ## Options
 
 - `-p <pkg>[,<pkg>...]` Install packages in the container via Homebrew.
   - Behavior: translate to `brew install` inside the container during startup.
-  - Failure handling: fail fast on unknown package or brew error.
-- `-c <path>[,<path>...]` Copy files/dirs from host into container (immutable inside container).
-  - Behavior: use `docker cp` after container creation but before user shell starts. Apply `chattr +i` or equivalent immutability when possible; otherwise set permissions read-only.
-- `-m <path>[:<containerPath>][,<path>...]` Mount host files/dirs into container (editable).
-  - Behavior: bind mounts via `-v` or `--mount` retain host writability.
+  - Idempotence: installed packages are detected and skipped.
+  - With `--cache-packages` (default true), Homebrew caches are persisted across runs.
+- `-c <path>[,<path>...]` Copy files/dirs from host into container (immutable).
+  - Behavior: defaults destination to container `$HOME`; copied entries are made read-only.
+- `-m <host>[:<container>][,<...>]` Mount host files/dirs into container (editable).
+  - Behavior: bind mounts via `--mount` retain host writability.
+  - Default destination: when `<container>` omitted, mounts to `$HOME/<basename(host)>`.
+  - Validation: container destination must be absolute if specified.
 - `-n <name>` Specify custom container name.
-  - Behavior: use name as-is after validation.
+  - Validation: must match `^[a-zA-Z0-9][a-zA-Z0-9_.-]+$` and not already exist.
 - `--prefix <prefix>` Prefix for generated container names when `-n` not provided.
-  - Behavior: `prefix-<timestamp>-<rand>`; ensure Docker name validity.
+  - Format: `<prefix>-yyyyMMddHHmmss-<rand>`; Docker-valid name enforced.
 - `--purge` Stop and remove the container after exit.
-  - Behavior: equivalent to `--rm` plus explicit network/volume cleanup if created.
+  - Equivalent to `--rm` plus explicit cleanup if created.
 - `--no-net` Disable network access inside the container.
-  - Behavior: `--network none`; when combined with `-p`, `brew install` should be skipped with a clear warning unless an offline cache is available.
-- `--memory <bytes|human>` Limit container memory usage.
-  - Behavior: pass to Docker `--memory` (e.g., `512m`, `2g`).
-- `--cpus <num>` Limit number of CPUs.
-  - Behavior: pass to Docker `--cpus`.
-- `--pids-limit <num>` Limit number of processes.
-  - Behavior: pass to Docker `--pids-limit`.
+  - Implication: `brew install` will be skipped; fish auto-install disabled.
+- `--memory <bytes|human>` Limit container memory usage (e.g., `512m`, `2g`).
+- `--cpus <num>` Limit number of CPUs (passed to Docker `--cpus`).
+- `--pids-limit <num>` Limit number of processes (Docker `--pids-limit`).
 - `--read-only` Make container filesystem read-only.
-  - Behavior: Docker `--read-only`; pair with `--writable` to carve exceptions.
+  - Behavior: Docker `--read-only`; `--writable` creates tmpfs exceptions.
 - `--writable <path>[,<path>...]` Allow specific paths to be writable even in read-only mode.
-  - Behavior: create tmpfs or bind mount writable directories.
-- `--amd64` Force container architecture to amd64.
-  - Behavior: `--platform linux/amd64`.
-- `--graceful` Gracefully stop the container with cleanup.
-  - Behavior: on SIGINT/SIGTERM send `docker stop` with timeout, then remove if `--purge`.
+  - Behavior: create tmpfs mounts; paths are created if missing.
+- `--amd64` Force container architecture to amd64 (`--platform linux/amd64`).
+- `--graceful` Gracefully stop the container.
+  - Behavior: `docker stop --timeout 10`; default is fast kill via `docker kill`.
+- `--image <ref>` Container image to use (default `homebrew/brew:latest`).
+- `--shell <name>` Shell to start (`fish` default; fallbacks: bash, zsh, sh).
+  - Behavior: probes availability; when `fish` preferred and network allowed, installs via brew if missing.
+- `--verbose` Print resolved docker commands and debug info.
+- `--cap-drop-all` Drop all Linux capabilities in container.
+- `--no-new-privs` Set `no-new-privileges` security option.
+- `--cache-packages` Persist Homebrew cache across runs (default true).
+  - Behavior: mounts a persistent Docker volume at Homebrew cache dirs.
+- `--purge-cache` Remove the persistent cache volume on exit.
+- `--user <user>` Run container processes as user (e.g., `1000:1000` or name).
 - `--profile <name>` Load and merge the named profile with CLI flags.
+- `--version` Print version, commit, and build date.
 
 ## Validation
 
 - Mutually aware flags:
   - `--no-net` with `-p`: warn and skip installs.
-  - `--read-only` without `--writable`: ensure shell remains usable (e.g., writable `/tmp`, `$HOME`).
-- Paths for `-c` and `-m` must exist on host; error otherwise.
-- Container name validity: `^[a-zA-Z0-9][a-zA-Z0-9_.-]+$` and unique.
-- Profile name validity and presence checked when requested.
+  - `--read-only` without `--writable`: ensure usability by adding `/tmp` as writable.
+- Paths for `-c` and `-m` must exist on host; absolute paths are required and symlinks are resolved.
+- Container name validity: regex check and uniqueness enforced before run.
 
 ## Name Generation
 
@@ -83,11 +92,20 @@ lazylab profile run offline --cpus 2
 
 # Shorthand with --profile
 lazylab --profile offline --cpus 2
+
+# Use ubuntu image, run as specific user, drop caps, no-new-privs
+lazylab --image ubuntu:22.04 --user 1000:1000 --cap-drop-all --no-new-privs
+
+# Copy to container home and auto-install fish (if network allowed)
+lazylab -c ./example/main.py --shell fish
+
+# Use package cache and then purge it
+lazylab -p jq,yq --cache-packages --purge-cache --purge
 ```
 
 ## Implementation Notes
 
-- Use a structured flag parser; validate early and aggregate errors.
-- Derive Docker CLI args deterministically from options; log full command line for auditability.
-- Stream container logs to stdout; forward signals.
-- On `--graceful`, trap signals and perform ordered shutdown.
+- Use structured flag parser; validate early and aggregate errors.
+- Derive Docker CLI args deterministically; log full command line when `--verbose`.
+- Probe shells with `command -v`; install fish only when preferred and online.
+- On `--graceful`, use `docker stop --timeout`; default is `docker kill`.
