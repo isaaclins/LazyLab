@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g., v0.1.0). If empty, will use current ref or generate one."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -32,7 +38,17 @@ jobs:
       - name: Derive version info
         id: meta
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            # From tag push or fallback to a timestamped pre-release tag
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              TAG=${GITHUB_REF#refs/tags/}
+            else
+              TAG="v0.0.0-${GITHUB_SHA::7}-$(date -u +%Y%m%d%H%M%S)"
+            fi
+          fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "commit=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
@@ -72,7 +88,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.meta.outputs.tag }}
           generate_release_notes: true
           files: |
             dist/**/lazylab-*
